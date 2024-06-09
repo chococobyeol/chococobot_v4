@@ -1,0 +1,23 @@
+app = "chococobot-v4"
+
+kill_signal = "SIGINT"
+kill_timeout = 5
+
+[env]
+
+[experimental]
+  auto_rollback = true
+
+[[services]]
+  internal_port = 8080  # 디스코드 봇이 웹 서버가 아님을 고려해 설정을 유지할 필요가 없습니다.
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 8080
+    handlers = []
+
+  [[services.tcp_checks]]
+    grace_period = "5s" # 허용된 시작 시간을 제공합니다.
+    interval = "30s"    # TCP 체크 간격을 길게 설정하여 불필요한 체크를 최소화합니다.
+    restart_limit = 0   # 재시작을 제한합니다.
+    timeout = "10s"     # 시간 초과를 길게 설정하여 시작에 충분한 시간을 제공합니다.
