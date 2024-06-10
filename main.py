@@ -20,6 +20,7 @@ TOKEN = os.getenv('DISCORD_TOKEN')
 # 디스코드 봇 인텐트를 설정합니다.
 intents = discord.Intents.default()
 intents.message_content = True
+intents.voice_states = True  # 음성 채널 사용을 위해 추가
 
 # 봇의 프리픽스를 설정하고 인텐트를 전달합니다.
 bot = commands.Bot(command_prefix='!', intents=intents)
@@ -31,6 +32,7 @@ async def on_ready():
 # 다른 모듈에서 기능을 가져옵니다.
 import chat_management
 import lostark_features
+import voice_management  # 새로운 모듈 추가
 
 # 채팅 관리 명령어를 설정합니다.
 chat_management.setup(bot)
@@ -39,16 +41,19 @@ chat_management.setup(bot)
 lostark_features.setup(bot)
 
 # 비동기 작업을 별도로 실행하기 위한 함수
-async def start_bot_and_tasks():
-    await bot.start(TOKEN)
-    # 로스트아크 기능의 비동기 작업을 시작합니다.
-    lostark_features.start_tasks()
-
-# asyncio를 사용하여 이벤트 루프를 시작합니다.
-if __name__ == "__main__":
+async def main():
     # 더미 서버를 백그라운드에서 실행합니다.
     server_thread = threading.Thread(target=run_dummy_server)
     server_thread.daemon = True
     server_thread.start()
 
-    asyncio.run(start_bot_and_tasks())
+    # 음성 관리 명령어를 설정합니다.
+    await voice_management.setup(bot)
+
+    # 봇을 시작합니다.
+    async with bot:
+        await bot.start(TOKEN)
+
+# asyncio를 사용하여 이벤트 루프를 시작합니다.
+if __name__ == "__main__":
+    asyncio.run(main())
