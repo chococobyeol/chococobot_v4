@@ -27,18 +27,22 @@ async def fetch_lostark_info(character_name):
 # 버튼 뷰 클래스
 class NicknameView(View):
     def __init__(self, ctx):
-        super().__init__()
+        super().__init__(timeout=60)  # 타임아웃 60초 설정
         self.ctx = ctx
 
     @discord.ui.button(label="닉네임 등록", style=discord.ButtonStyle.primary)
     async def register(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.ctx.author:
+            await interaction.response.send_message("이 버튼은 당신을 위한 것이 아닙니다.", ephemeral=True)
+            return
+
         await interaction.response.send_message("로스트아크 캐릭터 이름을 입력해주세요.", ephemeral=True)
 
         def check(m):
             return m.author == self.ctx.author and m.channel == self.ctx.channel
 
         try:
-            message = await bot.wait_for('message', check=check, timeout=60)
+            message = await self.ctx.bot.wait_for('message', check=check, timeout=60)
             character_name = message.content
             user_character_data[self.ctx.author.id] = character_name
             loaclass, loalevel = await fetch_lostark_info(character_name)
@@ -49,6 +53,10 @@ class NicknameView(View):
 
     @discord.ui.button(label="등록 해제", style=discord.ButtonStyle.danger)
     async def unregister(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.ctx.author:
+            await interaction.response.send_message("이 버튼은 당신을 위한 것이 아닙니다.", ephemeral=True)
+            return
+
         if self.ctx.author.id in user_character_data:
             del user_character_data[self.ctx.author.id]
             await self.ctx.send(f"{self.ctx.author.mention}, 닉네임 등록이 해제되었습니다.")
@@ -72,3 +80,8 @@ async def update_nicknames():
             loaclass, loalevel = await fetch_lostark_info(character_name)
             await member.edit(nick=f'{character_name}/{loaclass}/{loalevel}')
             await member.send(f"{member.mention}, 닉네임이 {character_name}/{loaclass}/{loalevel}로 갱신되었습니다.")
+
+# 메인 파일에서 이 함수를 호출하여 기능을 추가할 수 있도록 합니다.
+def setup(bot):
+    bot.add_command(loanickchange)
+    update_nicknames.start()

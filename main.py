@@ -16,16 +16,15 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 async def on_ready():
     print(f'Logged in as {bot.user}!')
 
-# 다른 모듈에서 기능을 가져옵니다.
+# 채팅 관리 기능 로드
 import chat_management
-import lostark_features
-
-# 채팅 관리 명령어를 추가합니다.
 bot.add_command(chat_management.clean)
 bot.add_command(chat_management.bigclean)
+bot.add_command(chat_management.follow)  # 따라하기 기능 추가
 
-# 로스트아크 관련 명령어를 추가합니다.
-bot.add_command(lostark_features.loanickchange)
+# 로스트아크 관련 기능 로드
+import lostark_features
+bot.load_extension("lostark_features")
 
 # 봇을 실행합니다.
 bot.run(TOKEN)

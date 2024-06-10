@@ -3,7 +3,7 @@ from discord.ext import commands
 
 # 최근 메시지를 청소하는 명령어
 @commands.command(name="청소")
-async def clean(ctx, *, text):
+async def clean(ctx, *, text: str):
     amount = int(text)
     print(amount)
     if amount > 100:
@@ -16,7 +16,7 @@ async def clean(ctx, *, text):
 
 # 관리자가 최근 메시지를 대청소하는 명령어
 @commands.command(name="대청소")
-async def bigclean(ctx, *, text):
+async def bigclean(ctx, *, text: str):
     if ctx.author.guild_permissions.administrator:
         amount = int(text)
         if amount > 1000:
@@ -31,3 +31,10 @@ async def bigclean(ctx, *, text):
             print(f'{ctx.author.nick}({ctx.author.name})님이 대청소 명령어를 사용했어요...')
     else:
         await ctx.channel.send(f"{ctx.author.mention}, 이 명령어는 서버 관리자 권한이 필요해요...")
+
+# 따라하기 명령어
+@commands.command(name="따라하기")
+async def follow(ctx, *, message: str):
+    await ctx.send(message)
+    print(f'{ctx.author.nick}({ctx.author.name})님이 따라하기 명령어를 사용했어요...')
+    print(message + '\n')
