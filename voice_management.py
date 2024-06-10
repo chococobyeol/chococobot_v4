@@ -161,33 +161,39 @@ class VoiceManagement(commands.Cog):
         
         if ctx.author.voice and ctx.author.voice.channel:
             channel = ctx.author.voice.channel
+            guild_id = ctx.guild.id
             logging.info(f"User is in channel: {channel.name}")
 
-            if ctx.voice_client and ctx.voice_client.is_connected():
-                if ctx.voice_client.channel == channel:
-                    await ctx.send(f"{channel.name} 채널에 이미 연결되어 있어요...")
-                    return
+            if guild_id in self.moving_channels and self.moving_channels[guild_id]:
+                await ctx.send("채널을 이동 중입니다. 잠시 후에 다시 시도해 주세요...")
+                return
+
+            try:
+                if ctx.voice_client and ctx.voice_client.is_connected():
+                    if ctx.voice_client.channel == channel:
+                        await ctx.send(f"{channel.name} 채널에 이미 연결되어 있어요...")
+                        return
+                    else:
+                        self.moving_channels[guild_id] = True
+                        await ctx.voice_client.move_to(channel)
+                        logging.info(f"Moved to channel: {channel.name}")
+                        await asyncio.sleep(1)  # 1초 대기
+                        self.moving_channels[guild_id] = False
                 else:
-                    await ctx.voice_client.move_to(channel)
-                    logging.info(f"Moved to channel: {channel.name}")
-                    # 채널 이동 후 잠시 대기
-                    await asyncio.sleep(1)  # 1초 대기
-            else:
-                try:
                     voice_client = await channel.connect()
                     logging.info(f"Connected to channel: {channel.name}")
                     self.voice_clients[channel] = {
                         'client': voice_client,
                         'last_active': asyncio.get_event_loop().time()
                     }
-                except discord.errors.ClientException as e:
-                    logging.error(f"Failed to connect to channel: {e}")
-                    await ctx.send(f"채널에 연결할 수 없어요: {e}")
-                    return
-                except Exception as e:
-                    logging.error(f"Unexpected error occurred while connecting to channel: {e}")
-                    await ctx.send(f"예기치 않은 오류가 발생했어요: {e}")
-                    return
+            except discord.errors.ClientException as e:
+                logging.error(f"Failed to connect to or move to channel: {e}")
+                await ctx.send(f"채널에 연결할 수 없어요: {e}")
+                return
+            except Exception as e:
+                logging.error(f"Unexpected error occurred while connecting to or moving to channel: {e}")
+                await ctx.send(f"예기치 않은 오류가 발생했어요: {e}")
+                return
 
             await ctx.send(f"{channel.name} 채널로 갔어요...")
         else:
