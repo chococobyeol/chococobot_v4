@@ -16,6 +16,7 @@ class VoiceManagement(commands.Cog):
         self.voice_clients = {}
         self.idle_time = 300  # 5분 (300초) 동안 아무도 없을 때 봇이 나가기 전 대기 시간
         self.queues = {}  # 서버별 큐를 관리하는 딕셔너리
+        self.moving_channels = {}  # 채널 이동 중인 상태를 관리하는 딕셔너리
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -29,17 +30,29 @@ class VoiceManagement(commands.Cog):
 
         if ctx.author.voice and ctx.author.voice.channel:
             user_channel = ctx.author.voice.channel
+            guild_id = ctx.guild.id
+
             logging.info(f"User is in channel: {user_channel.name}")
+
+            # 현재 봇이 다른 채널로 이동 중인지 확인
+            if guild_id in self.moving_channels and self.moving_channels[guild_id]:
+                await ctx.send("채널을 이동 중입니다. 잠시 후에 다시 시도해 주세요...")
+                return
 
             voice_client = ctx.voice_client
 
             try:
                 if voice_client and voice_client.is_connected():
                     if voice_client.channel != user_channel:
-                        await voice_client.move_to(user_channel)
+                        # 채널 이동 중임을 표시
+                        self.moving_channels[guild_id] = True
+                        await voice_client.disconnect()
+                        voice_client = await user_channel.connect()
                         logging.info(f"Moved to user's channel: {user_channel.name}")
                         # 채널 이동 후 잠시 대기
                         await asyncio.sleep(1)  # 1초 대기
+                        # 채널 이동 완료 후 표시 해제
+                        self.moving_channels[guild_id] = False
                 else:
                     voice_client = await user_channel.connect()
                     logging.info(f"Connected to channel: {user_channel.name}")
@@ -51,8 +64,6 @@ class VoiceManagement(commands.Cog):
                 logging.error(f"Unexpected error occurred while connecting to or moving to channel: {e}")
                 await ctx.send(f"예기치 않은 오류가 발생했어요: {e}")
                 return
-
-            guild_id = ctx.guild.id
 
             if guild_id not in self.queues:
                 self.queues[guild_id] = deque()
@@ -103,13 +114,15 @@ class VoiceManagement(commands.Cog):
                     asyncio.run_coroutine_threadsafe(self.play_next_in_queue(guild_id), self.bot.loop)
 
             # 음성 파일을 재생
-            if not voice_client.is_playing():
+            if voice_client.is_connected() and not voice_client.is_playing():
                 try:
                     voice_client.play(discord.FFmpegPCMAudio(filename), after=after_playing)
                     logging.info(f"Playing TTS for file: {filename}")
                 except Exception as e:
                     logging.error(f"Error occurred while playing file: {e}")
                     after_playing(e)  # 오류가 발생하면 큐에서 제거하고 다음 파일 재생
+            else:
+                logging.error("Voice client is not connected or is already playing.")
         else:
             logging.info(f"Queue for guild {guild_id} is empty")
 
