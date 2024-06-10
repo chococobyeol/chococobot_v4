@@ -15,7 +15,7 @@ class VoiceManagement(commands.Cog):
         self.bot = bot
         self.voice_clients = {}
         self.idle_time = 300  # 5분 (300초) 동안 아무도 없을 때 봇이 나가기 전 대기 시간
-        self.queues = {}  # 각 채널의 큐를 관리하는 딕셔너리
+        self.queues = {}  # 서버별 큐를 관리하는 딕셔너리
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -28,15 +28,21 @@ class VoiceManagement(commands.Cog):
         logging.info(f"say command called with text: {text}")
 
         if ctx.author.voice and ctx.author.voice.channel:
-            channel = ctx.author.voice.channel
-            logging.info(f"User is in channel: {channel.name}")
+            user_channel = ctx.author.voice.channel
+            logging.info(f"User is in channel: {user_channel.name}")
 
-            if ctx.voice_client and ctx.voice_client.is_connected():
-                voice_client = ctx.voice_client
+            voice_client = ctx.voice_client
+
+            # 봇이 연결된 채널이 사용자가 있는 채널과 다른 경우, 이동
+            if voice_client and voice_client.is_connected():
+                if voice_client.channel != user_channel:
+                    await voice_client.move_to(user_channel)
+                    logging.info(f"Moved to user's channel: {user_channel.name}")
             else:
+                # 봇이 아직 연결되지 않은 경우, 사용자의 채널에 연결
                 try:
-                    voice_client = await channel.connect()
-                    logging.info(f"Connected to channel: {channel.name}")
+                    voice_client = await user_channel.connect()
+                    logging.info(f"Connected to channel: {user_channel.name}")
                 except discord.errors.ClientException as e:
                     logging.error(f"Failed to connect to channel: {e}")
                     return
@@ -44,8 +50,10 @@ class VoiceManagement(commands.Cog):
                     logging.error(f"Unexpected error occurred while connecting to channel: {e}")
                     return
 
-            if channel not in self.queues:
-                self.queues[channel] = deque()
+            guild_id = ctx.guild.id
+
+            if guild_id not in self.queues:
+                self.queues[guild_id] = deque()
 
             # 고유한 파일 이름 생성
             unique_filename = f"tts_{uuid.uuid4()}.mp3"
@@ -56,14 +64,14 @@ class VoiceManagement(commands.Cog):
             logging.info(f"TTS generated for text: {text} with file name: {unique_filename}")
 
             # 요청을 큐에 추가
-            self.queues[channel].append((voice_client, unique_filename))
+            self.queues[guild_id].append((voice_client, unique_filename))
 
             # 큐가 비어 있다면 바로 재생 시작
-            if len(self.queues[channel]) == 1:
-                await self.play_next_in_queue(channel)
+            if len(self.queues[guild_id]) == 1:
+                await self.play_next_in_queue(guild_id)
             
             # 봇이 마지막으로 사용된 시간을 갱신
-            self.voice_clients[channel] = {
+            self.voice_clients[user_channel] = {
                 'client': voice_client,
                 'last_active': asyncio.get_event_loop().time()
             }
@@ -71,16 +79,16 @@ class VoiceManagement(commands.Cog):
             logging.info("User is not in a voice channel")
             await ctx.send("음성 채널에 접속한 상태여야 해요...")
 
-    async def play_next_in_queue(self, channel):
-        if self.queues[channel]:
-            voice_client, filename = self.queues[channel][0]  # 큐의 첫 번째 항목 가져오기
+    async def play_next_in_queue(self, guild_id):
+        if self.queues[guild_id]:
+            voice_client, filename = self.queues[guild_id][0]  # 큐의 첫 번째 항목 가져오기
 
             def after_playing(error):
                 if error:
                     logging.error(f"Error playing file: {error}")
 
                 # 큐에서 첫 번째 항목 제거
-                self.queues[channel].popleft()
+                self.queues[guild_id].popleft()
 
                 # 파일 삭제
                 if os.path.exists(filename):
@@ -88,28 +96,40 @@ class VoiceManagement(commands.Cog):
                     logging.info(f"TTS file {filename} removed")
 
                 # 다음 항목 재생
-                if self.queues[channel]:
-                    asyncio.run_coroutine_threadsafe(self.play_next_in_queue(channel), self.bot.loop)
+                if self.queues[guild_id]:
+                    asyncio.run_coroutine_threadsafe(self.play_next_in_queue(guild_id), self.bot.loop)
 
             # 음성 파일을 재생
             if not voice_client.is_playing():
                 voice_client.play(discord.FFmpegPCMAudio(filename), after=after_playing)
                 logging.info(f"Playing TTS for file: {filename}")
         else:
-            logging.info(f"Queue for channel {channel.name} is empty")
+            logging.info(f"Queue for guild {guild_id} is empty")
 
     @commands.command(name="저리가")
     async def leave(self, ctx):
         logging.info("leave command called")
         
         if ctx.voice_client:  # 봇이 음성 채널에 연결되어 있는 경우
+            guild_id = ctx.guild.id
+            channel = ctx.voice_client.channel
+
+            # 현재 음성 재생을 중단하고 큐를 초기화
+            if guild_id in self.queues:
+                self.queues[guild_id].clear()
+                logging.info(f"Cleared queue for guild {guild_id}")
+
+            if ctx.voice_client.is_playing():
+                ctx.voice_client.stop()
+                logging.info("Stopped playing audio")
+
             await ctx.voice_client.disconnect()
             logging.info("Disconnected from voice channel")
             
             # 연결이 끊어진 채널 정보를 voice_clients에서 제거
-            if ctx.author.voice.channel in self.voice_clients:
-                del self.voice_clients[ctx.author.voice.channel]
-                logging.info(f"Removed channel {ctx.author.voice.channel.name} from voice_clients")
+            if channel in self.voice_clients:
+                del self.voice_clients[channel]
+                logging.info(f"Removed channel {channel.name} from voice_clients")
 
             await ctx.send("음성 채널에서 나왔어요...")
         else:
