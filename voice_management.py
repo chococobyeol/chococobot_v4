@@ -33,22 +33,24 @@ class VoiceManagement(commands.Cog):
 
             voice_client = ctx.voice_client
 
-            # 봇이 연결된 채널이 사용자가 있는 채널과 다른 경우, 이동
-            if voice_client and voice_client.is_connected():
-                if voice_client.channel != user_channel:
-                    await voice_client.move_to(user_channel)
-                    logging.info(f"Moved to user's channel: {user_channel.name}")
-            else:
-                # 봇이 아직 연결되지 않은 경우, 사용자의 채널에 연결
-                try:
+            try:
+                if voice_client and voice_client.is_connected():
+                    if voice_client.channel != user_channel:
+                        await voice_client.move_to(user_channel)
+                        logging.info(f"Moved to user's channel: {user_channel.name}")
+                        # 채널 이동 후 잠시 대기
+                        await asyncio.sleep(1)  # 1초 대기
+                else:
                     voice_client = await user_channel.connect()
                     logging.info(f"Connected to channel: {user_channel.name}")
-                except discord.errors.ClientException as e:
-                    logging.error(f"Failed to connect to channel: {e}")
-                    return
-                except Exception as e:
-                    logging.error(f"Unexpected error occurred while connecting to channel: {e}")
-                    return
+            except discord.errors.ClientException as e:
+                logging.error(f"Failed to connect to or move to channel: {e}")
+                await ctx.send(f"채널에 연결할 수 없어요: {e}")
+                return
+            except Exception as e:
+                logging.error(f"Unexpected error occurred while connecting to or moving to channel: {e}")
+                await ctx.send(f"예기치 않은 오류가 발생했어요: {e}")
+                return
 
             guild_id = ctx.guild.id
 
@@ -66,15 +68,16 @@ class VoiceManagement(commands.Cog):
             # 요청을 큐에 추가
             self.queues[guild_id].append((voice_client, unique_filename))
 
-            # 큐가 비어 있다면 바로 재생 시작
-            if len(self.queues[guild_id]) == 1:
-                await self.play_next_in_queue(guild_id)
-            
             # 봇이 마지막으로 사용된 시간을 갱신
             self.voice_clients[user_channel] = {
                 'client': voice_client,
                 'last_active': asyncio.get_event_loop().time()
             }
+
+            # 큐가 비어 있거나 봇이 아직 음성을 재생 중이지 않다면 재생 시작
+            if not voice_client.is_playing():
+                await self.play_next_in_queue(guild_id)
+
         else:
             logging.info("User is not in a voice channel")
             await ctx.send("음성 채널에 접속한 상태여야 해요...")
@@ -101,8 +104,12 @@ class VoiceManagement(commands.Cog):
 
             # 음성 파일을 재생
             if not voice_client.is_playing():
-                voice_client.play(discord.FFmpegPCMAudio(filename), after=after_playing)
-                logging.info(f"Playing TTS for file: {filename}")
+                try:
+                    voice_client.play(discord.FFmpegPCMAudio(filename), after=after_playing)
+                    logging.info(f"Playing TTS for file: {filename}")
+                except Exception as e:
+                    logging.error(f"Error occurred while playing file: {e}")
+                    after_playing(e)  # 오류가 발생하면 큐에서 제거하고 다음 파일 재생
         else:
             logging.info(f"Queue for guild {guild_id} is empty")
 
@@ -150,6 +157,8 @@ class VoiceManagement(commands.Cog):
                 else:
                     await ctx.voice_client.move_to(channel)
                     logging.info(f"Moved to channel: {channel.name}")
+                    # 채널 이동 후 잠시 대기
+                    await asyncio.sleep(1)  # 1초 대기
             else:
                 try:
                     voice_client = await channel.connect()
