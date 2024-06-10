@@ -3,6 +3,17 @@ from discord.ext import commands
 import os
 import asyncio
 
+# 더미 HTTP 서버 추가
+import threading
+from http.server import SimpleHTTPRequestHandler, HTTPServer
+
+# 더미 HTTP 서버를 실행하기 위한 함수
+def run_dummy_server():
+    server_address = ('', int(os.getenv('PORT', 8000)))  # 포트 8000을 기본으로 사용하고, 환경변수 'PORT' 값을 사용할 수 있음
+    httpd = HTTPServer(server_address, SimpleHTTPRequestHandler)
+    print(f"Starting dummy server on port {server_address[1]}")
+    httpd.serve_forever()
+
 # 봇의 토큰을 환경 변수에서 가져옵니다.
 TOKEN = os.getenv('DISCORD_TOKEN')
 
@@ -35,4 +46,9 @@ async def start_bot_and_tasks():
 
 # asyncio를 사용하여 이벤트 루프를 시작합니다.
 if __name__ == "__main__":
+    # 더미 서버를 백그라운드에서 실행합니다.
+    server_thread = threading.Thread(target=run_dummy_server)
+    server_thread.daemon = True
+    server_thread.start()
+
     asyncio.run(start_bot_and_tasks())
