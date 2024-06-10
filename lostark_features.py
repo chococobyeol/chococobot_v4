@@ -71,7 +71,7 @@ async def loanickchange(ctx):
 
 # 매일 닉네임 갱신 작업
 @tasks.loop(hours=24)
-async def update_nicknames():
+async def update_nicknames(bot):
     await bot.wait_until_ready()
     
     for user_id, character_name in user_character_data.items():
@@ -84,4 +84,4 @@ async def update_nicknames():
 # 메인 파일에서 이 함수를 호출하여 기능을 추가할 수 있도록 합니다.
 def setup(bot):
     bot.add_command(loanickchange)
-    update_nicknames.start()
+    update_nicknames.start(bot)
