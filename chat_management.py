@@ -3,9 +3,8 @@ from discord.ext import commands
 
 # 최근 메시지를 청소하는 명령어
 @commands.command(name="청소")
-async def clean(ctx, *, text: str):
+async def clean(ctx, *, text):
     amount = int(text)
-    print(amount)
     if amount > 100:
         await ctx.channel.send("한 번에 하기 힘들어서 100개 까지만 가능해요...")
     else:
@@ -16,7 +15,7 @@ async def clean(ctx, *, text: str):
 
 # 관리자가 최근 메시지를 대청소하는 명령어
 @commands.command(name="대청소")
-async def bigclean(ctx, *, text: str):
+async def bigclean(ctx, *, text):
     if ctx.author.guild_permissions.administrator:
         amount = int(text)
         if amount > 1000:
@@ -36,5 +35,11 @@ async def bigclean(ctx, *, text: str):
 @commands.command(name="따라하기")
 async def follow(ctx, *, message: str):
     await ctx.send(message)
-    print(f'{ctx.author.nick}({ctx.author.name})님이 따라하기 명령어를 사용했어요...')
+    print('{}({})님이 따라하기 명령어를 사용했어요...'.format(ctx.author.nick, ctx.author.name))
     print(message + '\n')
+
+# 메인 파일에서 이 함수를 호출하여 기능을 추가할 수 있도록 합니다.
+def setup(bot):
+    bot.add_command(clean)
+    bot.add_command(bigclean)
+    bot.add_command(follow)

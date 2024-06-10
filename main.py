@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 import os
+import asyncio
 
 # 봇의 토큰을 환경 변수에서 가져옵니다.
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -20,14 +21,18 @@ async def on_ready():
 import chat_management
 import lostark_features
 
-# 채팅 관리 명령어를 추가합니다.
-bot.add_command(chat_management.clean)
-bot.add_command(chat_management.bigclean)
-bot.add_command(chat_management.follow)  # 따라하기 기능 추가
+# 채팅 관리 명령어를 설정합니다.
+chat_management.setup(bot)
 
-
-# 로스트아크 관련 명령어를 추가합니다.
+# 로스트아크 관련 기능을 설정합니다.
 lostark_features.setup(bot)
 
-# 봇을 실행합니다.
-bot.run(TOKEN)
+# 비동기 작업을 별도로 실행하기 위한 함수
+async def start_bot_and_tasks():
+    await bot.start(TOKEN)
+    # 로스트아크 기능의 비동기 작업을 시작합니다.
+    lostark_features.start_tasks()
+
+# asyncio를 사용하여 이벤트 루프를 시작합니다.
+if __name__ == "__main__":
+    asyncio.run(start_bot_and_tasks())
