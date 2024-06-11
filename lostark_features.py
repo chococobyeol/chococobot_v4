@@ -13,6 +13,7 @@ import asyncio
 logging.basicConfig(level=logging.INFO)
 
 # 사용자 게임 캐릭터 정보를 저장할 딕셔너리
+# 새로운 데이터 구조: (user_id, guild_id) 튜플을 키로 사용
 user_character_data = {}
 
 # JSON 파일 경로 (쓰기 권한이 있는 경로로 변경)
@@ -24,7 +25,7 @@ def load_user_data():
     if os.path.exists(USER_DATA_FILE):
         try:
             with open(USER_DATA_FILE, 'r') as file:
-                user_character_data = json.load(file)
+                user_character_data = {tuple(map(int, k.split('-'))): v for k, v in json.load(file).items()}
                 logging.info("User character data loaded from file.")
         except Exception as e:
             logging.error(f"Error loading user data: {e}")
@@ -35,7 +36,7 @@ def load_user_data():
 def save_user_data():
     try:
         with open(USER_DATA_FILE, 'w') as file:
-            json.dump(user_character_data, file)
+            json.dump({f"{k[0]}-{k[1]}": v for k, v in user_character_data.items()}, file)
             logging.info("User character data saved to file.")
     except Exception as e:
         logging.error(f"Error saving user data: {e}")
@@ -95,10 +96,9 @@ class NicknameView(View):
         try:
             message = await self.ctx.bot.wait_for('message', check=check, timeout=60)
             character_name = message.content
-            # 유저 ID와 캐릭터 이름, 서버 ID를 저장
-            user_character_data[self.ctx.author.id] = {
-                "character_name": character_name,
-                "guild_id": self.ctx.guild.id
+            # 유저 ID와 길드 ID를 키로 사용하여 저장
+            user_character_data[(self.ctx.author.id, self.ctx.guild.id)] = {
+                "character_name": character_name
             }
             save_user_data()  # 데이터를 저장합니다.
             loaclass, loalevel = await fetch_lostark_info(character_name)
@@ -125,8 +125,8 @@ class NicknameView(View):
             await interaction.response.send_message("이 버튼은 당신을 위한 것이 아닙니다.", ephemeral=True)
             return
 
-        if self.ctx.author.id in user_character_data:
-            del user_character_data[self.ctx.author.id]
+        if (self.ctx.author.id, self.ctx.guild.id) in user_character_data:
+            del user_character_data[(self.ctx.author.id, self.ctx.guild.id)]
             save_user_data()  # 데이터를 저장합니다.
             try:
                 await self.ctx.author.edit(nick=self.ctx.author.name)  # 기본 닉네임으로 변경
@@ -158,9 +158,8 @@ async def update_nicknames():
     # 디버깅을 위해 user_character_data의 내용을 출력
     logging.info(f"user_character_data: {user_character_data}")
 
-    for user_id, data in user_character_data.items():
+    for (user_id, guild_id), data in user_character_data.items():
         character_name = data["character_name"]
-        guild_id = data["guild_id"]
         logging.info(f"Processing user_id: {user_id}, character_name: {character_name}, guild_id: {guild_id}")
 
         guild = bot.get_guild(guild_id)
@@ -169,7 +168,7 @@ async def update_nicknames():
             continue
 
         try:
-            # get_member 대신 fetch_member를 사용하여 멤버를 정확하게 찾습니다.
+            # fetch_member를 사용하여 멤버를 정확하게 찾습니다.
             member = await guild.fetch_member(user_id)
         except discord.NotFound:
             logging.warning(f"Member with ID {user_id} not found in guild {guild.name}")
