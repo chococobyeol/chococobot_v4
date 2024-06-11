@@ -5,9 +5,9 @@ import aiohttp
 from bs4 import BeautifulSoup
 from urllib.parse import quote
 import logging
-import asyncio
 import json
 import os
+import asyncio
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -15,27 +15,30 @@ logging.basicConfig(level=logging.INFO)
 # 사용자 게임 캐릭터 정보를 저장할 딕셔너리
 user_character_data = {}
 
-# JSON 파일 경로
+# JSON 파일 경로 (쓰기 권한이 있는 경로로 변경)
 USER_DATA_FILE = 'user_character_data.json'
 
 # JSON 파일에서 데이터 로드
 def load_user_data():
     global user_character_data
     if os.path.exists(USER_DATA_FILE):
-        with open(USER_DATA_FILE, 'r') as file:
-            user_character_data = json.load(file)
-            logging.info("User character data loaded from file.")
-            print("User character data loaded from file.")
+        try:
+            with open(USER_DATA_FILE, 'r') as file:
+                user_character_data = json.load(file)
+                logging.info("User character data loaded from file.")
+        except Exception as e:
+            logging.error(f"Error loading user data: {e}")
     else:
         logging.info("No user data file found. Starting with an empty data set.")
-        print("No user data file found. Starting with an empty data set.")
 
 # JSON 파일에 데이터 저장
 def save_user_data():
-    with open(USER_DATA_FILE, 'w') as file:
-        json.dump(user_character_data, file)
-        logging.info("User character data saved to file.")
-        print("User character data saved to file.")
+    try:
+        with open(USER_DATA_FILE, 'w') as file:
+            json.dump(user_character_data, file)
+            logging.info("User character data saved to file.")
+    except Exception as e:
+        logging.error(f"Error saving user data: {e}")
 
 # 로스트아크 캐릭터 정보를 가져오는 함수
 async def fetch_lostark_info(character_name):
@@ -65,7 +68,6 @@ async def fetch_lostark_info(character_name):
         loalevel = loalevel_element.text.replace("Lv.", "").replace(",", "").strip()  # 쉼표 제거 및 공백 제거
 
         logging.info(f"Fetched info for {character_name}: Class = {loaclass}, Level = {loalevel}")
-        print(f"Fetched info for {character_name}: Class = {loaclass}, Level = {loalevel}")
         
         return loaclass, loalevel
     
@@ -93,7 +95,11 @@ class NicknameView(View):
         try:
             message = await self.ctx.bot.wait_for('message', check=check, timeout=60)
             character_name = message.content
-            user_character_data[self.ctx.author.id] = character_name
+            # 유저 ID와 캐릭터 이름, 서버 ID를 저장
+            user_character_data[self.ctx.author.id] = {
+                "character_name": character_name,
+                "guild_id": self.ctx.guild.id
+            }
             save_user_data()  # 데이터를 저장합니다.
             loaclass, loalevel = await fetch_lostark_info(character_name)
 
@@ -141,41 +147,42 @@ class NicknameView(View):
 @commands.command(name="로아닉", aliases=["로아닉네임", "로스트아크닉네임"])
 async def loanickchange(ctx):
     view = NicknameView(ctx)
-    # 명령어를 실행한 사용자에게만 메시지를 보이도록 설정
     await ctx.send("닉네임을 등록하거나 등록을 해제할 수 있습니다.", view=view, ephemeral=True)
 
 # 닉네임 갱신 작업
-@tasks.loop(minutes=60)
+@tasks.loop(minutes=1)
 async def update_nicknames():
     logging.info("Starting nickname update task.")
     await bot.wait_until_ready()
 
     # 디버깅을 위해 user_character_data의 내용을 출력
     logging.info(f"user_character_data: {user_character_data}")
-    print(f"user_character_data: {user_character_data}")
 
-    for user_id, character_name in user_character_data.items():
-        logging.info(f"Processing user_id: {user_id}, character_name: {character_name}")
-        print(f"Processing user_id: {user_id}, character_name: {character_name}")
+    for user_id, data in user_character_data.items():
+        character_name = data["character_name"]
+        guild_id = data["guild_id"]
+        logging.info(f"Processing user_id: {user_id}, character_name: {character_name}, guild_id: {guild_id}")
 
-        # 명령어를 실행한 서버 내에서만 해당 사용자를 찾습니다.
-        member = None
-        for guild in bot.guilds:
-            member = guild.get_member(user_id)
-            if member:
-                break
-
-        if member is None:
-            logging.warning(f"Member with ID {user_id} not found in any guild")
-            print(f"Member with ID {user_id} not found in any guild")
+        guild = bot.get_guild(guild_id)
+        if not guild:
+            logging.warning(f"Guild with ID {guild_id} not found")
             continue
 
-        logging.info(f"Found member: {member.name}")
-        print(f"Found member: {member.name}")
+        try:
+            # get_member 대신 fetch_member를 사용하여 멤버를 정확하게 찾습니다.
+            member = await guild.fetch_member(user_id)
+        except discord.NotFound:
+            logging.warning(f"Member with ID {user_id} not found in guild {guild.name}")
+            continue
+        except discord.Forbidden:
+            logging.warning(f"Insufficient permissions to fetch member {user_id} in guild {guild.name}")
+            continue
+        except Exception as e:
+            logging.error(f"Error fetching member {user_id} in guild {guild.name}: {e}")
+            continue
 
         current_nick = member.display_name
         logging.info(f"Checking nickname for {member.name}: current nickname is '{current_nick}'")
-        print(f"Current nickname for {member.name}: '{current_nick}'")
 
         # 최신 캐릭터 정보 가져오기
         loaclass, loalevel = await fetch_lostark_info(character_name)
@@ -184,17 +191,15 @@ async def update_nicknames():
             continue
 
         logging.info(f"Current character info: Class = {loaclass}, Level = {loalevel}")
-        print(f"Current character info: Class = {loaclass}, Level = {loalevel}")
-        
+
         # 현재 닉네임에서 클래스와 레벨 추출 (캐릭터이름/클래스/레벨 형식)
         parts = current_nick.split('/')
         if len(parts) == 3 and parts[0] == character_name:
             current_class, current_level = parts[1], parts[2]
             logging.info(f"Comparing current class = {current_class}, current level = {current_level} with fetched class = {loaclass}, fetched level = {loalevel}")
-            print(f"Comparing current class = {current_class}, current level = {current_level} with fetched class = {loaclass}, fetched level = {loalevel}")
 
-            # 문자열로 비교하지 않기 위해, 레벨을 숫자로 변환하여 비교
             try:
+                # 레벨을 숫자로 변환하여 비교
                 current_level_num = float(current_level)
                 fetched_level_num = float(loalevel)
             except ValueError:
@@ -205,23 +210,22 @@ async def update_nicknames():
             if current_class != loaclass or current_level_num != fetched_level_num:
                 new_nick = f'{character_name}/{loaclass}/{loalevel}'
                 logging.info(f"Updating nickname for {member.name} to '{new_nick}'")
-                print(f"Updating nickname for {member.name} to '{new_nick}'")
                 try:
                     await member.edit(nick=new_nick)
+                    logging.info(f"Nickname updated for {member.name} to '{new_nick}'")
                 except discord.Forbidden:
                     logging.error(f"Failed to update nickname for {member.name}: insufficient permissions.")
                 except Exception as e:
                     logging.error(f"Error updating nickname for {member.name}: {e}")
             else:
                 logging.info(f"No change needed for {member.name}. Current class and level are up-to-date.")
-                print(f"No change needed for {member.name}. Current class and level are up-to-date.")
         else:
             # 현재 닉네임이 예상 형식이 아닌 경우 닉네임 갱신
             new_nick = f'{character_name}/{loaclass}/{loalevel}'
             logging.info(f"Updating nickname for {member.name} to '{new_nick}'")
-            print(f"Updating nickname for {member.name} to '{new_nick}'")
             try:
                 await member.edit(nick=new_nick)
+                logging.info(f"Nickname updated for {member.name} to '{new_nick}'")
             except discord.Forbidden:
                 logging.error(f"Failed to update nickname for {member.name}: insufficient permissions.")
             except Exception as e:
