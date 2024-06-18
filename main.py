@@ -11,7 +11,8 @@ import chat_management
 import lostark_features
 import voice_management
 import command_help
-import word_chain  # 끝말잇기 모듈 추가
+import word_chain
+import change_botname  # 새로 추가된 모듈
 
 # 봇의 토큰을 환경 변수에서 가져옵니다.
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -19,7 +20,7 @@ TOKEN = os.getenv('DISCORD_TOKEN')
 # 디스코드 봇 인텐트를 설정합니다.
 intents = discord.Intents.default()
 intents.message_content = True
-intents.voice_states = True  # 음성 채널 사용을 위해 추가
+intents.voice_states = True
 
 # 디스코드 봇 인스턴스를 생성하고 기본 help 명령어를 비활성화합니다.
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
@@ -52,7 +53,8 @@ async def main():
     lostark_features.setup(bot)
     await voice_management.setup(bot)
     command_help.setup(bot)
-    await word_chain.setup(bot)  # 끝말잇기 모듈 설정
+    await word_chain.setup(bot)
+    change_botname.setup(bot)  # 새로운 모듈 설정
 
     # 봇을 시작합니다.
     async with bot:
